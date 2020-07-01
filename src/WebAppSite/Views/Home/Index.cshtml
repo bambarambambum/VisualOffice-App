@@ -1,0 +1,106 @@
+﻿
+@{
+    ViewData["Title"] = "Visual Office";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+@model IEnumerable<WebAppSite.Models.User>
+<h1 class="display-4">Сотрудники офиса</h1>
+<br />
+<!-- Map -->
+<link rel="stylesheet" href="~/css/map.css" />
+@if (ViewBag.ErrorType != "DB_Error" && ViewBag.ErrorType != "API_Error")
+{
+    <div class="text-center">
+        <object type="image/svg+xml" data='~/map.svg' id='map' width="900" height="506"></object>
+    </div>
+    <div id="map-tooltip" class="map-tooltip"></div>
+    <script>
+        var tooltip = document.getElementById("map-tooltip");
+        // Close popup
+        document.addEventListener('click', function () {
+            tooltip.style.display = 'none';
+        });
+        // Load map for edit
+        var object = document.getElementById("map");
+        object.addEventListener('load', function () {
+            var svgDocument = object.contentDocument;
+            var usersdata = [];
+            var mpos = object.getBoundingClientRect();
+            // Get users
+            $.ajax({
+                url: '/Home/GetUsers',
+                async: false,
+                dataType: 'json',
+                success: function (json) {
+                    usersdata = json;
+                }
+            });
+            var obj = JSON.parse(usersdata);
+            for (let i = 1; i <= obj.length; i++) {
+                var svgElement = svgDocument.getElementById("p" + i.toString());
+                svgElement.addEventListener('click', function () {
+                    tooltip.innerHTML = GetTextWorkplace(i - 1);
+                    var sel = this,
+                        pos = sel.getBoundingClientRect();
+                    tooltip.style.display = 'block';
+                    tooltip.style.top = mpos.top + pos.top - pos.height / 8 - tooltip.offsetHeight + 'px';
+                    tooltip.style.left = mpos.left + pos.left + pos.width / 2 - tooltip.offsetWidth / 2 + 'px';
+                });
+            }
+            // Fill popup windows
+            function GetTextWorkplace(num) {
+                var n, fio, rp, edit;
+                n = "<label>Рабочее место:</label> " + obj[num].id + "</br>";
+                fio = "<label>ФИО:</label> " + obj[num].fio + "</br>";
+                rp = "<label>РП:</label> " + obj[num].rp.fio + "</br>";
+                edit = "<a href=" + "/Home/Edit/" + (num + 1) + ">" + "Редактировать" + "</a>";
+                text = n + rp + fio + edit;
+                return text;
+            }
+        }, false);
+    </script>
+
+<!-- Table -->
+    <table class="table table-hover">
+        <thead class="thead-dark">
+            <tr>
+                <th scope="col">#</th>
+                <th scope="col">РП</th>
+                <th scope="col">ФИО</th>
+                <th scope="col">Email</th>
+                <th scope="col"> </th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                <!-- Row -->
+                <tr>
+                    <th scope="row" style="width:5%">
+                        <b>@Html.DisplayFor(modelItem => item.Id)</b>
+                    </th>
+                    <td style="width:30%">
+                        @Html.DisplayFor(modelItem => item.RP.Fio)
+                    </td>
+                    <td style="width:35%">
+                        @Html.DisplayFor(modelItem => item.Fio)
+                    </td>
+                    <td>
+                        @Html.DisplayFor(modelItem => item.Email)
+                    </td>
+                    <td style="width:15%" align="center">
+                        @Html.ActionLink("Редактировать", "Edit", new { id = item.Id })
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if (ViewBag.ErrorType == "DB_Error")
+{
+    <div class="p-3 mb-2 bg-danger text-white">Не удалось получить сотрудников из базы. Проверьте, что база данных доступна!</div>
+}
+else
+{
+    <div class="p-3 mb-2 bg-danger text-white">Сервис users.api недоступен. Проверьте, что контейнер users.api запущен.</div>
+}

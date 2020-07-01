@@ -1,0 +1,68 @@
+﻿@model WebAppSite.Models.User
+@{
+    ViewData["Title"] = "Изменение рабочего места";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<script>
+    (function () {
+        'use strict';
+        window.addEventListener('load', function () {
+            // Fetch all the forms we want to apply custom Bootstrap validation styles to
+            var forms = document.getElementsByClassName('needs-validation');
+            // Loop over them and prevent submission
+            var validation = Array.prototype.filter.call(forms, function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (form.checkValidity() === false) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                }, false);
+            });
+        }, false);
+    })();
+</script>
+<h1 class="display-4">Изменение рабочего места № @Model.Id</h1>
+<br />
+@if (ViewBag.ErrorType != "DB_Error" && ViewBag.ErrorType != "API_Error")
+{
+    <form method="post" action="~/Home/Edit" class="needs-validation" novalidate>
+        <!-- Hidden user values -->
+        <input type="hidden" value="@Model.Id" name="Id" />
+        <input type="hidden" value="@Model.RpId" name="RpId" />
+        <input type="hidden" value="@Model.RP.Id" name="RP.Id" />
+        <input type="hidden" value="@Model.RP.Email" name="RP.Email" />
+        <!-- Text boxes -->
+        <div class="input-group mb-3">
+            <div class="input-group-prepend">
+                <span class="input-group-text" id="basic-addon1">Руководитель</span>
+            </div>
+            <input type="text" name="RP.Fio" value="@Model.RP.Fio" class="form-control" required />
+        </div>
+        <div class="input-group mb-3">
+            <div class="input-group-prepend">
+                <span class="input-group-text" id="basic-addon1">Сотрудник</span>
+            </div>
+            <input id="getUser" type="text" name="Fio" value="@Model.Fio" class="form-control" required />
+        </div>
+        <div class="input-group mb-3">
+            <div class="input-group-prepend">
+                <span class="input-group-text" id="basic-addon1">Почта</span>
+            </div>
+            <input id="getUser" type="text" name="Email" value="@Model.Email" class="form-control" required />
+        </div>
+        <br />
+        <!-- Save button -->
+        <p><input type="submit" value="Сохранить" class="btn btn-dark btn-lg btn-block" /></p>
+        <span class="badge badge-success">@ViewBag.Good</span>
+        <span class="badge badge-danger">@ViewBag.Bad</span>
+    </form>
+}
+else if (ViewBag.ErrorType == "DB_Error")
+{
+    <div class="p-3 mb-2 bg-danger text-white">Не удалось получить сотрудника из базы. Проверьте, что база данных доступна!</div>
+}
+else
+{
+    <div class="p-3 mb-2 bg-danger text-white">Сервис users.api недоступен. Проверьте, что контейнер users.api запущен.</div>
+}

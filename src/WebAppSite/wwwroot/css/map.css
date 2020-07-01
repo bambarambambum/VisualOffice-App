@@ -1,0 +1,29 @@
+﻿.map-tooltip {
+    border: 0,5px solid black;
+    display: none;
+    border-radius: 5px;
+    padding: 10px;
+    position: absolute;
+    background: white;
+    color: black;
+    box-shadow: 0 8px 17px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+}
+
+    .map-tooltip::after, .map-tooltip::before {
+        content: '';
+        position: absolute;
+        background: white;
+        left: 50%;
+        bottom: -15px;
+        width: 5px;
+        height: 20px;
+        box-shadow: 0 8px 17px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+        z-index: -1; /* Прячем за основным блоком */
+        transform: rotate(45deg); /* Поворачиваем на 45º */
+        -webkit-transform: rotate(45deg);
+    }
+
+    .map-tooltip::before {
+        z-index: 1; /* Накладываем поверх, чтобы скрыть следы тени */
+        box-shadow: none; /* Прячем тень */
+    }
