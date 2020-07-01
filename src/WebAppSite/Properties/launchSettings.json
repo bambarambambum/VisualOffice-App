@@ -20,9 +20,12 @@
       "commandName": "Docker",
       "launchBrowser": true,
       "launchUrl": "{Scheme}://{ServiceHost}:{ServicePort}",
+      "environmentVariables": {
+        "SUPER": "PUPER"
+      },
       "publishAllPorts": true,
-      "useSSL": false,
-      "httpPort": 5000
+      "httpPort": 5000,
+      "useSSL": false
     }
   }
 }

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System;
 using Users.API.Infrastructure;
 using Users.API.Models.Context;
 
@@ -13,12 +14,12 @@ namespace VisualOffice
     {
         public Startup(IConfiguration configuration, IWebHostEnvironment dev)
         {
-            Environment = dev;
-            Configuration = configuration;
+            _environment = dev;
+            _configuration = configuration;
         }
 
-        public IConfiguration Configuration { get; }
-        public IWebHostEnvironment Environment { get; }
+        public IConfiguration _configuration { get; }
+        public IWebHostEnvironment _environment { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
@@ -33,12 +34,21 @@ namespace VisualOffice
             services.AddControllers().AddNewtonsoftJson(options =>
             options.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore
             );
-
-            if (Environment.IsDevelopment())
+            // Database connection
+            string database;
+            if (_environment.IsDevelopment())
             {
-                var database = Configuration.GetConnectionString("VisualOfficeDev");
-                services.AddDbContext<dbContext>(options => options.UseMySQL(database));
+                database = _configuration.GetConnectionString("Development");
             }
+            else
+            {
+                string server = Environment.GetEnvironmentVariable("MYSQL_SERVER_NAME");
+                string userid = Environment.GetEnvironmentVariable("MYSQL_USER");
+                string password = Environment.GetEnvironmentVariable("MYSQL_USER_PASSWORD");
+                string db = Environment.GetEnvironmentVariable("MYSQL_DATABASE");
+                database = $"server = {server}; userid = {userid}; password = {password}; database = {db};";
+            }
+            services.AddDbContext<dbContext>(options => options.UseMySQL(database));
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

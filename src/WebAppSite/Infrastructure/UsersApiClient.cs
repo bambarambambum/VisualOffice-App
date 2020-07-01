@@ -1,11 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
-using WebAppSite.Models;
 
 namespace WebAppSite.Infrastructure
 {
@@ -17,9 +16,20 @@ namespace WebAppSite.Infrastructure
     public class UsersApiClient : IUsersApiClient
     {
         private readonly HttpClient _client;
-        public UsersApiClient (HttpClient httpClient)
+        // private readonly IOptions<Settings> _settings;
+        public UsersApiClient(HttpClient httpClient, IConfiguration configuration)
         {
-            httpClient.BaseAddress = new Uri("http://users.api/");
+            // Get env "UsersAPI"
+            string apiName;
+            if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable("HOST_USERS_API")))
+            {
+                apiName = Environment.GetEnvironmentVariable("HOST_USERS_API");
+            }
+            else
+            {
+                apiName = configuration.GetSection("HOST_USERS_API").Value;
+            }
+            httpClient.BaseAddress = new Uri($"http://{apiName}");
             _client = httpClient;
         }
         public async Task<string> GetData(string path)

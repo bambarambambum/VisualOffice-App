@@ -13,7 +13,7 @@ services:
       context: .
       dockerfile: src/WebAppSite/Dockerfile
     environment:
-        - API_URL=users.api:80
+        - HOST_USERS_API=users.api
 
  # seq:
  #   image: datalust/seq:2020.1.4164-pre
