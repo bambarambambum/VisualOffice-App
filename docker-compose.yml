@@ -15,6 +15,6 @@ services:
     environment:
         - API_URL=users.api:80
 
-  seq:
-    image: datalust/seq:2020.1.4164-pre
-    container_name: seq
+ # seq:
+ #   image: datalust/seq:2020.1.4164-pre
+ #   container_name: seq
