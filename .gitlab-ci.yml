@@ -1,0 +1,355 @@
+---
+image: alpine:latest
+
+stages:
+  - test
+  - build
+  - review
+  - release
+  - cleanup
+
+test:
+  stage: test
+  script:
+    - exit 0
+  only:
+    - branches
+
+build webappsite:
+  stage: build
+  only:
+    refs:
+      - branches
+  image: docker:git
+  services:
+    - docker:18.09.7-dind
+  variables:
+    DOCKER_DRIVER: overlay2
+    CI_REGISTRY: 'index.docker.io'
+    CI_APPLICATION_REPOSITORY: $CI_REGISTRY/$CI_REGISTRY_USER/webappsite
+    CI_APPLICATION_TAG: $CI_COMMIT_REF_SLUG
+    CI_CONTAINER_NAME: ci_job_build_${CI_JOB_ID}
+  when: manual
+  before_script:
+    - >
+      if ! docker info &>/dev/null; then
+        if [ -z "$DOCKER_HOST" -a "$KUBERNETES_PORT" ]; then
+          export DOCKER_HOST='tcp://localhost:2375'
+        fi
+      fi
+  script:
+    # Building
+    - echo "Building Dockerfile-based application..."
+    - echo `git show --format="%h" HEAD | head -1` > build_info.txt
+    - echo `git rev-parse --abbrev-ref HEAD` >> build_info.txt
+    - cd src/WebAppSite/
+    - docker build -t "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" -f Dockerfile.linux .
+    - >
+      if [[ -n "$CI_REGISTRY_USER" ]]; then
+        echo "Logging to GitLab Container Registry with CI credentials...for build"
+        docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+      fi
+    - echo "Pushing to GitLab Container Registry..."
+    - docker push "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG"
+
+build usersapi:
+  stage: build
+  only:
+    refs:
+      - branches
+  image: docker:git
+  services:
+    - docker:18.09.7-dind
+  variables:
+    DOCKER_DRIVER: overlay2
+    CI_REGISTRY: 'index.docker.io'
+    CI_APPLICATION_REPOSITORY: $CI_REGISTRY/$CI_REGISTRY_USER/usersapi
+    CI_APPLICATION_TAG: $CI_COMMIT_REF_SLUG
+    CI_CONTAINER_NAME: ci_job_build_${CI_JOB_ID}
+  when: manual
+  before_script:
+    - >
+      if ! docker info &>/dev/null; then
+        if [ -z "$DOCKER_HOST" -a "$KUBERNETES_PORT" ]; then
+          export DOCKER_HOST='tcp://localhost:2375'
+        fi
+      fi
+  script:
+    # Building
+    - echo "Building Dockerfile-based application..."
+    - echo `git show --format="%h" HEAD | head -1` > build_info.txt
+    - echo `git rev-parse --abbrev-ref HEAD` >> build_info.txt
+    - cd src/Users/
+    - docker build -t "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" -f Dockerfile.linux .
+    - >
+      if [[ -n "$CI_REGISTRY_USER" ]]; then
+        echo "Logging to GitLab Container Registry with CI credentials...for build"
+        docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+      fi
+    - echo "Pushing to GitLab Container Registry..."
+    - docker push "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG"
+
+
+# Trigger for deploy to production
+# release_deploy:
+#   stage: release_deploy
+#   variables:
+#     REF: master
+#   only:
+#     - master
+#   before_script:
+#     - apk add -U curl
+#   script:
+#     - >
+#       curl -X POST \
+#        -F token="$TRIGGER_TOKEN" \
+#        -F ref="$REF" \
+#        http://gitlab-gitlab/api/v4/projects/1/trigger/pipeline
+
+review webappsite:
+   stage: review
+   variables:
+     KUBE_NAMESPACE: review-webappsite
+     host: $CI_PROJECT_PATH_SLUG-webappsite-$CI_COMMIT_REF_SLUG
+     CI_APPLICATION_TAG: $CI_COMMIT_REF_SLUG
+     name: $CI_ENVIRONMENT_SLUG
+   environment:
+     name: review/$CI_PROJECT_PATH/webappsite/$CI_COMMIT_REF_NAME
+     url: http://$CI_PROJECT_PATH_SLUG-webappsite-$CI_COMMIT_REF_SLUG
+     on_stop: stop review webappsite
+   when: manual
+   only:
+     refs:
+       - branches
+     kubernetes: active
+   except:
+     - master
+   before_script:
+     # installing dependencies
+     - apk add -U openssl curl tar gzip bash ca-certificates git
+     - wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub
+     - wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.23-r3/glibc-2.23-r3.apk
+     - apk add glibc-2.23-r3.apk
+     - curl https://storage.googleapis.com/pub/gsutil.tar.gz | tar -xz -C $HOME
+     - export PATH=${PATH}:$HOME/gsutil
+     - curl https://get.helm.sh/helm-v3.2.4-linux-amd64.tar.gz | tar zx
+     - mv linux-amd64/helm /usr/bin/
+     - helm version --client
+     - curl  -o /usr/bin/sync-repo.sh https://raw.githubusercontent.com/kubernetes/helm/master/scripts/sync-repo.sh
+     - chmod a+x /usr/bin/sync-repo.sh
+     - curl -L -o /usr/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+     - chmod +x /usr/bin/kubectl
+     - kubectl version --client
+     # ensuring namespace
+     - kubectl describe namespace "$KUBE_NAMESPACE" || kubectl create namespace "$KUBE_NAMESPACE"
+   script:
+     - echo "Clone deploy repository..."
+     - git clone http://gitlab-gitlab/$CI_PROJECT_NAMESPACE/visualoffice-deploy.git
+     - echo "Download helm dependencies..."
+     - helm dep update visualoffice-deploy/visualoffice
+     - echo "Deploy helm release $name to $KUBE_NAMESPACE"
+     - echo "Upgrading existing release..."
+     - >
+       helm upgrade \
+         --install \
+         --wait \
+         --set webappsite.ingress.host="$host" \
+         --set webappsite.image.tag="$CI_APPLICATION_TAG" \
+         --namespace="$KUBE_NAMESPACE" \
+         --version="$CI_PIPELINE_ID-$CI_JOB_ID" \
+         "$name" \
+         visualoffice-deploy/visualoffice/
+
+review usersapi:
+   stage: review
+   variables:
+     KUBE_NAMESPACE: review-usersapi
+     host: $CI_PROJECT_PATH_SLUG-webappsite-$CI_COMMIT_REF_SLUG
+     CI_APPLICATION_TAG: $CI_COMMIT_REF_SLUG
+     name: $CI_ENVIRONMENT_SLUG
+   environment:
+     name: review/$CI_PROJECT_PATH/usersapi/$CI_COMMIT_REF_NAME
+     url: http://$CI_PROJECT_PATH_SLUG-usersapi-$CI_COMMIT_REF_SLUG
+     on_stop: stop review usersapi
+   when: manual
+   only:
+     refs:
+       - branches
+     kubernetes: active
+   except:
+     - master
+   before_script:
+     # installing dependencies
+     - apk add -U openssl curl tar gzip bash ca-certificates git
+     - wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub
+     - wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.23-r3/glibc-2.23-r3.apk
+     - apk add glibc-2.23-r3.apk
+     - curl https://storage.googleapis.com/pub/gsutil.tar.gz | tar -xz -C $HOME
+     - export PATH=${PATH}:$HOME/gsutil
+     - curl https://get.helm.sh/helm-v3.2.4-linux-amd64.tar.gz | tar zx
+     - mv linux-amd64/helm /usr/bin/
+     - helm version --client
+     - curl  -o /usr/bin/sync-repo.sh https://raw.githubusercontent.com/kubernetes/helm/master/scripts/sync-repo.sh
+     - chmod a+x /usr/bin/sync-repo.sh
+     - curl -L -o /usr/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+     - chmod +x /usr/bin/kubectl
+     - kubectl version --client
+     # ensuring namespace
+     - kubectl describe namespace "$KUBE_NAMESPACE" || kubectl create namespace "$KUBE_NAMESPACE"
+   script:
+     - echo "Clone deploy repository..."
+     - git clone http://gitlab-gitlab/$CI_PROJECT_NAMESPACE/visualoffice-deploy.git
+     - echo "Download helm dependencies..."
+     - helm dep update visualoffice-deploy/visualoffice
+     - echo "Deploy helm release $name to $KUBE_NAMESPACE"
+     - echo "Upgrading existing release..."
+     - >
+       helm upgrade \
+         --install \
+         --wait \
+         --set usersapi.image.tag="$CI_APPLICATION_TAG" \
+         --namespace="$KUBE_NAMESPACE" \
+         --version="$CI_PIPELINE_ID-$CI_JOB_ID" \
+         "$name" \
+         visualoffice-deploy/visualoffice/
+
+release webappsite:
+   stage: release
+   image: docker
+   services:
+     - docker:18.09.7-dind
+   variables:
+    CI_REGISTRY: 'index.docker.io'
+    CI_APPLICATION_REPOSITORY: $CI_REGISTRY/$CI_REGISTRY_USER/webappsite
+    CI_APPLICATION_TAG: $CI_COMMIT_REF_SLUG
+    CI_CONTAINER_NAME: ci_job_build_${CI_JOB_ID}
+   when: manual
+   only:
+     - master
+   before_script:
+     - >
+       if ! docker info &>/dev/null; then
+         if [ -z "$DOCKER_HOST" -a "$KUBERNETES_PORT" ]; then
+           export DOCKER_HOST='tcp://localhost:2375'
+         fi
+       fi
+   script:
+     # Releasing
+     - echo "Updating docker images ..."
+     - >
+       if [[ -n "$CI_REGISTRY_USER" ]]; then
+         echo "Logging to GitLab Container Registry with CI credentials for release..."
+         docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+       fi
+     - docker pull "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG"
+     - docker tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" "$CI_APPLICATION_REPOSITORY:$(cat VERSION)"
+     - docker push "$CI_APPLICATION_REPOSITORY:$(cat VERSION)"
+     - docker tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" "$CI_APPLICATION_REPOSITORY:latest"
+     - docker push "$CI_APPLICATION_REPOSITORY:latest"
+
+release usersapi:
+   stage: release
+   image: docker
+   services:
+     - docker:18.09.7-dind
+   variables:
+    CI_REGISTRY: 'index.docker.io'
+    CI_APPLICATION_REPOSITORY: $CI_REGISTRY/$CI_REGISTRY_USER/usersapi
+    CI_APPLICATION_TAG: $CI_COMMIT_REF_SLUG
+    CI_CONTAINER_NAME: ci_job_build_${CI_JOB_ID}
+   when: manual
+   only:
+     - master
+   before_script:
+     - >
+       if ! docker info &>/dev/null; then
+         if [ -z "$DOCKER_HOST" -a "$KUBERNETES_PORT" ]; then
+           export DOCKER_HOST='tcp://localhost:2375'
+         fi
+       fi
+   script:
+     # Releasing
+     - echo "Updating docker images ..."
+     - >
+       if [[ -n "$CI_REGISTRY_USER" ]]; then
+         echo "Logging to GitLab Container Registry with CI credentials for release..."
+         docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+       fi
+     - docker pull "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG"
+     - docker tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" "$CI_APPLICATION_REPOSITORY:$(cat VERSION)"
+     - docker push "$CI_APPLICATION_REPOSITORY:$(cat VERSION)"
+     - docker tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" "$CI_APPLICATION_REPOSITORY:latest"
+     - docker push "$CI_APPLICATION_REPOSITORY:latest"
+    
+stop review webappsite:
+   stage: cleanup
+   variables:
+     GIT_STRATEGY: none
+     name: $CI_ENVIRONMENT_SLUG
+     KUBE_NAMESPACE: review-webappsite
+   environment:
+     name: review/$CI_PROJECT_PATH/webappsite/$CI_COMMIT_REF_NAME
+     action: stop
+   when: manual
+   allow_failure: true
+   only:
+     refs:
+       - branches
+     kubernetes: active
+   except:
+     - master
+   before_script:
+     # installing dependencies
+     - apk add -U openssl curl tar gzip bash ca-certificates git
+     - wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub
+     - wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.23-r3/glibc-2.23-r3.apk
+     - apk add glibc-2.23-r3.apk
+     - curl https://storage.googleapis.com/pub/gsutil.tar.gz | tar -xz -C $HOME
+     - export PATH=${PATH}:$HOME/gsutil
+     - curl https://get.helm.sh/helm-v3.2.4-linux-amd64.tar.gz | tar zx
+     - mv linux-amd64/helm /usr/bin/
+     - helm version --client
+     - curl  -o /usr/bin/sync-repo.sh https://raw.githubusercontent.com/kubernetes/helm/master/scripts/sync-repo.sh
+     - chmod a+x /usr/bin/sync-repo.sh
+     - curl -L -o /usr/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+     - chmod +x /usr/bin/kubectl
+     - kubectl version --client
+   script:
+     - helm delete "$name" -n "$KUBE_NAMESPACE"
+
+stop review usersapi:
+   stage: cleanup
+   variables:
+     GIT_STRATEGY: none
+     name: $CI_ENVIRONMENT_SLUG
+     KUBE_NAMESPACE: review-usersapi
+   environment:
+     name: review/$CI_PROJECT_PATH/usersapi/$CI_COMMIT_REF_NAME
+     action: stop
+   when: manual
+   allow_failure: true
+   only:
+     refs:
+       - branches
+     kubernetes: active
+   except:
+     - master
+   before_script:
+     # installing dependencies
+     - apk add -U openssl curl tar gzip bash ca-certificates git
+     - wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub
+     - wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.23-r3/glibc-2.23-r3.apk
+     - apk add glibc-2.23-r3.apk
+     - curl https://storage.googleapis.com/pub/gsutil.tar.gz | tar -xz -C $HOME
+     - export PATH=${PATH}:$HOME/gsutil
+     - curl https://get.helm.sh/helm-v3.2.4-linux-amd64.tar.gz | tar zx
+     - mv linux-amd64/helm /usr/bin/
+     - helm version --client
+     - curl  -o /usr/bin/sync-repo.sh https://raw.githubusercontent.com/kubernetes/helm/master/scripts/sync-repo.sh
+     - chmod a+x /usr/bin/sync-repo.sh
+     - curl -L -o /usr/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+     - chmod +x /usr/bin/kubectl
+     - kubectl version --client
+   script:
+     - helm delete "$name" -n "$KUBE_NAMESPACE"
+...
