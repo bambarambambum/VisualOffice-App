@@ -129,7 +129,7 @@ build usersapi master:
     - kubectl describe namespace "$KUBE_NAMESPACE" || kubectl create namespace "$KUBE_NAMESPACE"
   script:
     - echo "Clone deploy repository..."
-    - git clone http://gitlab.visualoffice.tk/$CI_PROJECT_NAMESPACE/visualoffice-deploy.git
+    - git clone http://gitlab.$URL/$CI_PROJECT_NAMESPACE/visualoffice-deploy.git
     - echo "Download helm dependencies..."
     - helm dep update visualoffice-deploy/visualoffice
     - echo "Deploy helm release $name to $KUBE_NAMESPACE"
