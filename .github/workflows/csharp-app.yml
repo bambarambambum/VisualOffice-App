@@ -31,6 +31,7 @@ jobs:
       id: docker_build_usersapi
       with:
         context: ./src/Users
+        file: Dockerfile.linux
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.USERSAPI_IMAGE_NAME }}:${{ env.USERSAPI_IMAGE_TAG }}
 
@@ -39,5 +40,6 @@ jobs:
       id: docker_build_webappsite
       with:
         context: ./src/WebAppSite
+        file: Dockerfile.linux
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.WEBAPPSITE_IMAGE_NAME }}:${{ env.WEBAPPSITE_IMAGE_TAG }}
