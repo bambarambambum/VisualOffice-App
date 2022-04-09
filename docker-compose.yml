@@ -1,20 +1,28 @@
-version: '3.4'
+version: '3.8'
 
 services:
   users.api:
-    image: ${DOCKER_REGISTRY-}usersapi
-    build:
-      context: .
-      dockerfile: src/Users/Dockerfile
+    container_name: vos-usersapi
+    image: ${DOCKER_REGISTRY}/usersapi:${TAG}
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "6001:80"
+    networks:
+      - backend
 
   webappsite:
-    image: ${DOCKER_REGISTRY-}webappsite
-    build:
-      context: .
-      dockerfile: src/WebAppSite/Dockerfile
+    container_name: vos-webapp
+    image: ${DOCKER_REGISTRY}/webappsite:${TAG}
     environment:
-        - HOST_USERS_API=users.api
+      - ASPNETCORE_ENVIRONMENT=Development
+      - HOST_USERS_API=vos-usersapi
+    ports:
+      - "5001:80"
+    networks:
+      - frontend
 
- # seq:
- #   image: datalust/seq:2020.1.4164-pre
- #   container_name: seq
+networks:
+  frontend:
+    external: true
+  backend:
