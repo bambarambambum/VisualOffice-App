@@ -6,8 +6,10 @@ services:
     image: ${DOCKER_REGISTRY}/usersapi:${TAG}
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-    ports:
-      - "6001:80"
+      - MYSQL_SERVER_NAME=mysql
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_USER_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
     networks:
       - backend
 
@@ -20,7 +22,7 @@ services:
     ports:
       - "5001:80"
     networks:
-      - frontend
+      - backend
 
   mysql:
     container_name: mysql
